@@ -9,8 +9,8 @@ import (
 var testConfig = Config{
 	Addr:     "imap.exmail.qq.com",
 	Port:     "993",
-	Username: "fuming@lanjingren.com",
-	Password: "NNJfm1",
+	Username: "xxxx",
+	Password: "xxx",
 }
 
 func TestMail_Scan(t *testing.T) {
