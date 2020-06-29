@@ -1,4 +1,4 @@
-module mail
+module github.com/nanjingfm/imap
 
 go 1.14
 
