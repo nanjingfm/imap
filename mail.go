@@ -41,6 +41,10 @@ type Mail struct {
 	saveUid func(uid uint32)
 }
 
+func (p *Mail) AddFilter(filter ...Filter) {
+	p.filters = append(p.filters, filter...)
+}
+
 func (p *Mail) connect() (c *client.Client, err error) {
 	c, err = client.DialTLS(fmt.Sprintf("%s:%s", p.c.Addr, p.c.Port), nil)
 	if err != nil {
@@ -68,7 +72,7 @@ func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
 
 	// 收邮件
 	go func() {
-		err := p.fetch(ctx, boxName, 1, messagesCh)
+		err := p.fetch(ctx, boxName, 10, messagesCh)
 		if err == nil && p.saveUid != nil {
 			p.saveUid(newestUid) // fixme:data race
 		}
