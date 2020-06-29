@@ -3,7 +3,6 @@ package mail
 import (
 	"context"
 	"fmt"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/emersion/go-imap"
 	"github.com/emersion/go-imap/client"
 	"github.com/emersion/go-message/charset"
@@ -18,11 +17,11 @@ import (
 // TODO增量更新
 
 type Config struct {
-	Addr     string `json:"addr" binding:"required"`     // 服务器地址
-	Port     string `json:"port" binding:"required"`     // 端口号
-	Username string `json:"username" binding:"required"` // 账号
-	Password string `json:"password" binding:"required"` // 密码
-
+	Addr      string `json:"addr" binding:"required"`     // 服务器地址
+	Port      string `json:"port" binding:"required"`     // 端口号
+	Username  string `json:"username" binding:"required"` // 账号
+	Password  string `json:"password" binding:"required"` // 密码
+	StorePath string `json:"store_path"` // eml文件保存路径
 }
 
 type Filter func(*imap.Message) bool
@@ -30,6 +29,9 @@ type Filter func(*imap.Message) bool
 func NewMail(c Config) *Mail {
 	mail := &Mail{}
 	mail.c = c
+	//mail.saveUid = func(uid uint32) {
+	//	fmt.Println(uid)
+	//}
 	return mail
 }
 
@@ -45,7 +47,6 @@ func (p *Mail) connect() (c *client.Client, err error) {
 		dftLogger.Errorf("<connectMailServer> client dial err:%v", err)
 		return
 	}
-	c.Timeout = time.Second *5
 
 	// 登录
 	err = c.Login(p.c.Username, p.c.Password)
@@ -67,12 +68,11 @@ func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
 
 	// 收邮件
 	go func() {
-		err := p.fetch(ctx, boxName, 10, messagesCh)
-		if err != nil {
-			close(messagesCh)
-		} else if p.saveUid != nil {
+		err := p.fetch(ctx, boxName, 1, messagesCh)
+		if err == nil && p.saveUid != nil {
 			p.saveUid(newestUid) // fixme:data race
 		}
+		close(messagesCh)
 	}()
 
 	// 处理邮件
@@ -85,9 +85,10 @@ func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
 			}
 			if lastUid > 0 && message.Uid == lastUid {
 				cancel()
-				return
+				break
 			}
 			if p.filter(message) {
+				go p.save(message)
 				msgChan <- message
 			}
 		}
@@ -96,13 +97,16 @@ func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
 	return msgChan
 }
 
+func (p *Mail) save(msg *imap.Message) {
+	_ = DftSaver.Save(msg)
+}
+
 func (p *Mail) fetch(stop context.Context, boxName string, limitNum uint32, messagesCh chan *imap.Message) (err error) {
 	var c *client.Client
 	var sw sync.WaitGroup
 	defer func() {
 		sw.Wait()
 	}()
-	seqSet := new(imap.SeqSet)
 
 	// 如果退出登录，尝试重新登录
 	c, err = p.connect()
@@ -110,24 +114,31 @@ func (p *Mail) fetch(stop context.Context, boxName string, limitNum uint32, mess
 		dftLogger.Errorf("<StartReceivedMail> connect mail server err:%v", err)
 		return
 	}
+	defer c.Logout()
 	// 3. 读取收件箱
-	mbox, err := c.Select(boxName, true)
+	mbox, err := c.Select(boxName, false)
 	if err != nil {
 		dftLogger.Errorf("<StartReceivedMail> select INBOX err:%v", err)
 		return
 	}
 	// 获取邮件总数量
 	count := mbox.Messages
-	for i := uint32(1); i <= count; i += limitNum {
+	for count > 0 {
 		select {
 		case <-stop.Done(): // 监听退出信号
 			return
 		default:
 			// nothing
 		}
-		seqSet.Clear()
-		seqSet.AddRange(i, i+limitNum)
-		spew.Dump(seqSet)
+
+		seqSet := new(imap.SeqSet)
+		if count > limitNum {
+			seqSet.AddRange(count-limitNum, count)
+			count = count - limitNum
+		} else {
+			seqSet.AddRange(1, count)
+			count = 0
+		}
 		tempCh := make(chan *imap.Message)
 		sw.Add(1)
 		go func() {
@@ -136,16 +147,13 @@ func (p *Mail) fetch(stop context.Context, boxName string, limitNum uint32, mess
 				messagesCh <- message
 			}
 		}()
-		go func() {
-			spew.Dump(c.State())
-			time.Sleep(time.Second)
-		}()
-		err = c.Fetch(seqSet, []imap.FetchItem{imap.FetchEnvelope}, tempCh)
+		var section imap.BodySectionName
+		err = c.Fetch(seqSet, []imap.FetchItem{imap.FetchEnvelope, imap.FetchUid, section.FetchItem()}, tempCh)
 		if err != nil {
 			dftLogger.Errorf("mail fetch failed, err: %v", err)
 			return
 		}
-		time.Sleep(time.Second * 2)
+		time.Sleep(time.Second * 1)
 	}
 	return
 }

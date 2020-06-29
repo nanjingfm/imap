@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/emersion/go-imap"
 	"testing"
-	"time"
 )
 
 var testConfig = Config{
@@ -17,8 +16,7 @@ var testConfig = Config{
 func TestMail_Scan(t *testing.T) {
 	mail := NewMail(testConfig)
 	ch := mail.Scan(imap.InboxName, 0)
-	for _ = range ch {
-		fmt.Print("1")
+	for range ch {
+		fmt.Println("*")
 	}
-	time.Sleep(time.Second * 3)
 }
