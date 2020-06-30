@@ -21,7 +21,7 @@ type Config struct {
 	Port      string `json:"port" binding:"required"`     // 端口号
 	Username  string `json:"username" binding:"required"` // 账号
 	Password  string `json:"password" binding:"required"` // 密码
-	StorePath string `json:"store_path"` // eml文件保存路径
+	StorePath string `json:"store_path"`                  // eml文件保存路径
 }
 
 type Filter func(*imap.Message) bool
@@ -38,6 +38,7 @@ func NewMail(c Config) *Mail {
 type Mail struct {
 	c       Config
 	filters []Filter
+	savers  []Saver
 	saveUid func(uid uint32)
 }
 
@@ -101,8 +102,16 @@ func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
 	return msgChan
 }
 
+func (p *Mail) AddSaver(saver Saver)  {
+	p.savers = append(p.savers, saver)
+}
+
 func (p *Mail) save(msg *imap.Message) {
-	_ = DftSaver.Save(msg)
+	for _, saver := range p.savers {
+		if saver != nil {
+			_ = saver.Save(msg)
+		}
+	}
 }
 
 func (p *Mail) fetch(stop context.Context, boxName string, limitNum uint32, messagesCh chan *imap.Message) (err error) {

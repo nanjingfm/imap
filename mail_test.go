@@ -9,14 +9,17 @@ import (
 var testConfig = Config{
 	Addr:     "imap.exmail.qq.com",
 	Port:     "993",
-	Username: "xxxx",
-	Password: "xxx",
+	Username: "xxx",
+	Password: "xxxx",
 }
 
 func TestMail_Scan(t *testing.T) {
 	mail := NewMail(testConfig)
+	mail.AddSaver(&LocalSaver{BasePath: "/Users/xman/code/data"})
 	ch := mail.Scan(imap.InboxName, 0)
+	count := 0
 	for range ch {
-		fmt.Println("*")
+		count++
+		fmt.Println(count)
 	}
 }
