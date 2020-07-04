@@ -15,7 +15,7 @@ var testConfig = Config{
 
 func TestMail_Scan(t *testing.T) {
 	mail := NewMail(testConfig)
-	mail.AddSaver(&LocalSaver{BasePath: "/Users/xman/code/data"})
+	mail.AddSaver(&LocalSaver{BasePath: "/Users/hades/code/data"})
 	ch := mail.Scan(imap.InboxName, 0)
 	count := 0
 	for range ch {

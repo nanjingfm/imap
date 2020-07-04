@@ -109,7 +109,7 @@ func (p *Mail) AddSaver(saver Saver)  {
 func (p *Mail) save(msg *imap.Message) {
 	for _, saver := range p.savers {
 		if saver != nil {
-			_ = saver.Save(msg)
+			_, _ = saver.Save(GetBody(msg))
 		}
 	}
 }

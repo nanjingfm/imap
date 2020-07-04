@@ -13,23 +13,22 @@ import (
 var DftSaver = &LocalSaver{}
 
 type Saver interface {
-	Save(message *imap.Message) error // 保存邮件
+	Save(data []byte) (filePath string, err error) // 保存邮件
 }
 
 type LocalSaver struct {
 	BasePath string
 }
 
-func (d LocalSaver) Save(message *imap.Message) error {
-	data := getBody(message)
+func (d LocalSaver) Save(data []byte) (filePath string, err error) {
 	dirPath, filePath := d.parse(data)
-	err := os.MkdirAll(dirPath, os.ModePerm)
+	err = os.MkdirAll(dirPath, os.ModePerm)
 	if err != nil {
-		return err
+		return
 	}
 	// 保存到本地文件
 	err = ioutil.WriteFile(filePath, data, 0644)
-	return err
+	return
 }
 
 func (d LocalSaver) parse(data []byte) (dirPath, filePath string){
@@ -44,7 +43,7 @@ func hashKey(data []byte) string {
 	return fmt.Sprintf("%x", has) //将[]byte转成16进制
 }
 
-func getBody(msg *imap.Message) []byte {
+func GetBody(msg *imap.Message) []byte {
 	var body []byte
 	for _, value := range msg.Body {
 		len := value.Len()
