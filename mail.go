@@ -65,9 +65,9 @@ func (p *Mail) connect() (c *client.Client, err error) {
 	return
 }
 
-func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
+func (p *Mail) Scan(pCtx context.Context, boxName string) <-chan *imap.Message {
 	messagesCh := make(chan *imap.Message)
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(pCtx)
 	newestUid := uint32(0)
 	msgChan := make(chan *imap.Message)
 
@@ -88,9 +88,12 @@ func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
 				newestUid = message.Uid
 				firstFlag = true
 			}
-			if lastUid > 0 && message.Uid == lastUid {
+			select {
+			case <-ctx.Done():
 				cancel()
 				break
+			default:
+				// nothing
 			}
 			if p.filter(message) {
 				go p.save(message)
@@ -102,7 +105,7 @@ func (p *Mail) Scan(boxName string, lastUid uint32) <-chan *imap.Message {
 	return msgChan
 }
 
-func (p *Mail) AddSaver(saver Saver)  {
+func (p *Mail) AddSaver(saver Saver) {
 	p.savers = append(p.savers, saver)
 }
 
@@ -146,7 +149,7 @@ func (p *Mail) fetch(stop context.Context, boxName string, limitNum uint32, mess
 
 		seqSet := new(imap.SeqSet)
 		if count > limitNum {
-			seqSet.AddRange(count-limitNum, count)
+			seqSet.AddRange(count-limitNum+1, count)
 			count = count - limitNum
 		} else {
 			seqSet.AddRange(1, count)
@@ -156,8 +159,13 @@ func (p *Mail) fetch(stop context.Context, boxName string, limitNum uint32, mess
 		sw.Add(1)
 		go func() {
 			defer sw.Done()
+			bf := make([]*imap.Message, 0, limitNum)
 			for message := range tempCh {
-				messagesCh <- message
+				bf = append(bf, message)
+			}
+			l := len(bf)
+			for i := 0; i < l; i++ {
+				messagesCh <- bf[l-i-1]
 			}
 		}()
 		var section imap.BodySectionName
